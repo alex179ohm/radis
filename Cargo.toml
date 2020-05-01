@@ -11,9 +11,10 @@ tls = []
 geo = []
 
 [dependencies]
-futures = "0.3.4"
+futures-io = "0.3.4"
+futures-task = "0.3.4"
 bytes = "0.5.4"
-backoff = "0.1.6"
+#backoff = "0.1.6"
 pin-project-lite = "0.1.4"
 
 [dev-dependencies]

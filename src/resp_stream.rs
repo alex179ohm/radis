@@ -1,7 +1,7 @@
 use crate::frame::{ERROR, SIMPLE_STRING};
 use bytes::BytesMut;
-use futures::io::{AsyncRead, AsyncWrite};
-use futures::task::{Context, Poll};
+use futures_io::{AsyncRead, AsyncWrite};
+use futures_task::{Context, Poll};
 use std::io;
 use std::pin::Pin;
 
