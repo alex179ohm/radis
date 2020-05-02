@@ -2,7 +2,7 @@ use crate::frame::{ARRAY, BULK_STRING, CRLN};
 use bytes::{BufMut, BytesMut};
 use std::convert::TryFrom;
 
-/// Cmd is a Wrapper struct around BytesMut and represents the encoded command expected by redis.
+/// Create Redis Cmd with Args.
 ///
 /// Allocates a Vec of &str, and copies it in inner BytesMut buffer encoded as Array of Bulk Strings as expected by the redis resp protocol.
 /// # Errors
@@ -16,7 +16,7 @@ use std::convert::TryFrom;
 /// # Examples
 /// ```rust,no-run
 /// let pass = "mysecretpass";
-/// let cmd: Cmd = format!("AUTH {}", pass).into();
+/// let cmd = Cmd::new("AUTH").arg(pass).build();
 /// assert_eq!(&b"*2\r\n$4\r\nAUTH\r\n$4\r\npass\r\n"[..], cmd.as_ref());
 /// ```
 #[derive(Debug)]
@@ -69,16 +69,5 @@ impl<S: AsRef<str>> Cmd<S> {
 impl AsRef<[u8]> for CmdBuffer {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    #[test]
-    fn test_cmd_into() {
-        let pass = "pass";
-        let cmd = Cmd::new("AUTH").arg(pass).build();
-        assert_eq!(&b"*2\r\n$4\r\nAUTH\r\n$4\r\npass\r\n"[..], cmd.as_ref());
     }
 }
