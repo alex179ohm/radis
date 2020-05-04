@@ -27,7 +27,8 @@ impl From<CmdEncodingError> for io::Error {
 /// let cmd = Cmd::new("AUTH").arg(pass).build().expect("failed to create auth command");
 /// assert_eq!(&b"*2\r\n$4\r\nAUTH\r\n$4\r\npass\r\n"[..], cmd.as_ref());
 /// ```
-pub struct Cmd<S>(Vec<S>);
+#[derive(Debug, PartialEq)]
+pub struct Cmd<S>(pub Vec<S>);
 
 impl<S: AsRef<str>> Cmd<S> {
     /// Creates a new Cmd struct with the cmd :
@@ -35,8 +36,8 @@ impl<S: AsRef<str>> Cmd<S> {
         Cmd(vec![cmd])
     }
 
-    pub fn arg(mut self, s: S) -> Cmd<S> {
-        self.0.push(s);
+    pub fn arg(mut self, arg: S) -> Self {
+        self.0.push(arg);
         self
     }
 
