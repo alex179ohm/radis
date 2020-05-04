@@ -1,33 +1,38 @@
 use crate::frame::{ARRAY, BULK_STRING, CRLN};
 use bytes::{BufMut, BytesMut};
 use std::convert::TryFrom;
+use std::io;
+use std::num::TryFromIntError;
 
-/// Create Redis Cmd with Args.
+struct CmdEncodingError(TryFromIntError);
+
+impl From<TryFromIntError> for CmdEncodingError {
+    fn from(e: TryFromIntError) -> Self {
+        CmdEncodingError(e)
+    }
+}
+
+impl From<CmdEncodingError> for io::Error {
+    fn from(e: CmdEncodingError) -> Self {
+        io::Error::new(io::ErrorKind::Other, e.0)
+    }
+}
+
+/// Represents Redis Command and it Arguments.
 ///
-/// Allocates a Vec of &str, and copies it in inner BytesMut buffer encoded as Array of Bulk Strings as expected by the redis resp protocol.
-/// # Errors
-/// Panics if fails to convert usize to u8 on encoding bulk string lenghts.
 /// # Examples
-/// ```rust,no-run
-/// let cmd: Cmd = "AUTH pass".into();
-/// assert_eq!(&b"*2\r\n$4\r\nAUTH\r\n$4\r\npass\r\n"[..], cmd.as_ref());
-/// ```
-/// Or with format macro.
-/// # Examples
-/// ```rust,no-run
+/// ```rust
+/// # use radis::Cmd;
 /// let pass = "mysecretpass";
-/// let cmd = Cmd::new("AUTH").arg(pass).build();
+/// let cmd = Cmd::new("AUTH").arg(pass).build().expect("failed to create auth command");
 /// assert_eq!(&b"*2\r\n$4\r\nAUTH\r\n$4\r\npass\r\n"[..], cmd.as_ref());
 /// ```
-#[derive(Debug)]
-pub struct CmdBuffer(BytesMut);
-
-#[derive(Debug)]
 pub struct Cmd<S>(Vec<S>);
 
 impl<S: AsRef<str>> Cmd<S> {
-    pub fn new(s: S) -> Cmd<S> {
-        Cmd(vec![s])
+    /// Creates a new Cmd struct with the cmd :
+    pub fn new(cmd: S) -> Cmd<S> {
+        Cmd(vec![cmd])
     }
 
     pub fn arg(mut self, s: S) -> Cmd<S> {
@@ -35,36 +40,42 @@ impl<S: AsRef<str>> Cmd<S> {
         self
     }
 
-    pub fn build(self) -> CmdBuffer {
+    pub fn build(self) -> Result<CmdBuffer, io::Error> {
         let mut len = self.0.len();
         let mut buf = BytesMut::new();
 
         buf.put(&[ARRAY][..]);
 
         while len > 0 {
-            let n = u8::try_from((len % 10) + 48).expect("falied to convert usize to u8");
+            let n = u8::try_from((len % 10) + 48)
+                .map_err(|e| io::Error::from(CmdEncodingError::from(e)))?;
             buf.put(&[n][..]);
             len /= 10;
         }
         buf.put(&CRLN[..]);
 
-        self.0.into_iter().for_each(|s| {
+        for s in self.0 {
             let mut len = s.as_ref().len();
             buf.put(&[BULK_STRING][..]);
 
             while len > 0 {
-                let n = u8::try_from((len % 10) + 48).expect("falied to convert usize to u8");
+                let n = u8::try_from((len % 10) + 48)
+                    .map_err(|e| io::Error::from(CmdEncodingError::from(e)))?;
                 buf.put(&[n][..]);
                 len /= 10;
             }
             buf.put(&CRLN[..]);
             buf.put(s.as_ref().as_bytes());
             buf.put(&CRLN[..]);
-        });
+        }
 
-        CmdBuffer(buf)
+        Ok(CmdBuffer(buf))
     }
 }
+
+/// The Encoded Redis command buffer.
+#[derive(Debug)]
+pub struct CmdBuffer(BytesMut);
 
 impl AsRef<[u8]> for CmdBuffer {
     fn as_ref(&self) -> &[u8] {

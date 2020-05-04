@@ -3,6 +3,7 @@ name = "radis"
 version = "0.1.0"
 authors = ["Alessandro Cresto Miseroglio <alex179ohm@gmail.com>"]
 edition = "2018"
+license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,6 +13,7 @@ geo = []
 [dependencies]
 futures-io = "0.3.4"
 futures-task = "0.3.4"
+futures-core = "0.3.4"
 bytes = "0.5.4"
 pin-project-lite = "0.1.4"
 
