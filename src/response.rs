@@ -1,5 +1,6 @@
 use bytes::BytesMut;
 
+/// The Redis server Response.
 pub struct Response(BytesMut);
 
 impl Into<Option<i64>> for Response {
