@@ -31,10 +31,10 @@ impl From<CmdEncodingError> for io::Error {
 pub struct Cmd<S>(pub Vec<S>);
 
 impl<S: AsRef<str>> Cmd<S> {
-    /// Creates a new Redis Command with command
+    /// Creates a new Redis Command.
     ///
     /// # Arguments
-    /// cmd: a slice string representing the Redis command
+    /// a slice string representing the Redis command
     ///
     /// # Examples
     ///```
@@ -45,10 +45,10 @@ impl<S: AsRef<str>> Cmd<S> {
         Cmd(vec![cmd])
     }
 
-    /// Adds the argument to the Redis command
+    /// Aopends the argument to the Redis command.
     ///
     /// # Arguments
-    /// arg: every type implementing AsRef\<str\>
+    /// every type implementing AsRef\<str\>
     ///
     /// # Examples
     ///```
@@ -60,6 +60,26 @@ impl<S: AsRef<str>> Cmd<S> {
         self
     }
 
+    /// Builds the Cmd as Resp Encoded [CmdBuffer](struct.CmdBuffer.html)
+    ///
+    /// # Errors
+    /// Returns [Error](https://doc.rust-lang.org/std/io/struct.Error.html) if fails to encode the
+    /// Cmd.
+    ///
+    /// # Examples
+    /// ```
+    ///# use radis::{Cmd, CmdBuffer};
+    /// let cmd = Cmd::new("SET").arg("key").arg("value").build();
+    /// match cmd {
+    ///     Ok(c) => {
+    ///         assert_eq!(&b"*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n"[..], c.as_ref());
+    ///     }
+    ///     Err(e) => {
+    ///         panic!("On Encoding Redis Command: {}", e);
+    ///     }
+    /// }
+    ///
+    /// ```
     pub fn build(self) -> Result<CmdBuffer, io::Error> {
         let mut len = self.0.len();
         let mut buf = BytesMut::new();
