@@ -18,7 +18,7 @@ impl From<CmdEncodingError> for io::Error {
     }
 }
 
-/// Represents Redis Command and it Arguments.
+/// The Redis Command and Arguments.
 ///
 /// # Examples
 /// ```rust
@@ -31,11 +31,30 @@ impl From<CmdEncodingError> for io::Error {
 pub struct Cmd<S>(pub Vec<S>);
 
 impl<S: AsRef<str>> Cmd<S> {
-    /// Creates a new Cmd struct with the cmd :
+    /// Creates a new Redis Command with command
+    ///
+    /// # Arguments
+    /// cmd: a slice string representing the Redis command
+    ///
+    /// # Examples
+    ///```
+    ///# use radis::Cmd;
+    /// let cmd = Cmd::new("SET");
+    ///```
     pub fn new(cmd: S) -> Cmd<S> {
         Cmd(vec![cmd])
     }
 
+    /// Adds the argument to the Redis command
+    ///
+    /// # Arguments
+    /// arg: every type implementing AsRef\<str\>
+    ///
+    /// # Examples
+    ///```
+    ///# use radis::Cmd;
+    ///let cmd = Cmd::new("SET").arg("key").arg("value");
+    ///```
     pub fn arg(mut self, arg: S) -> Self {
         self.0.push(arg);
         self
