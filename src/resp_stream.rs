@@ -4,34 +4,17 @@ use bytes::BytesMut;
 use futures_core::Stream;
 use futures_io::{AsyncRead, AsyncWrite};
 use futures_task::{Context, Poll};
+use pin_project_lite::pin_project;
 use std::io;
 use std::pin::Pin;
 
-pub struct RespStream<S> {
-    stream: S,
-    lenght: i64,
-    items: i64,
-    r_buffer: BytesMut,
-}
-
-impl<S> RespStream<S> {
-    pin_utils::unsafe_pinned!(stream: S);
-    pin_utils::unsafe_unpinned!(r_buffer: BytesMut);
-    pin_utils::unsafe_unpinned!(lenght: i64);
-    pin_utils::unsafe_unpinned!(items: i64);
-
-    fn project<'a>(
-        self: Pin<&'a mut Self>,
-    ) -> (Pin<&'a mut S>, &'a mut BytesMut, &mut i64, &mut i64) {
-        unsafe {
-            let this = self.get_unchecked_mut();
-            (
-                Pin::new_unchecked(&mut this.stream),
-                &mut this.r_buffer,
-                &mut this.lenght,
-                &mut this.items,
-            )
-        }
+pin_project! {
+    pub struct RespStream<S> {
+        #[pin]
+        stream: S,
+        lenght: i64,
+        items: i64,
+        r_buffer: BytesMut,
     }
 }
 
@@ -52,7 +35,8 @@ impl<S: AsyncRead + Unpin> AsyncRead for RespStream<S> {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        let (stream, ..) = self.project();
+        let this = self.project();
+        let stream: Pin<&mut S> = this.stream;
         stream.poll_read(cx, buf)
     }
 }
@@ -63,17 +47,20 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for RespStream<S> {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        let (stream, ..) = self.project();
+        let this = self.project();
+        let stream: Pin<&mut S> = this.stream;
         stream.poll_write(cx, buf)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let (stream, ..) = self.project();
+        let this = self.project();
+        let stream: Pin<&mut S> = this.stream;
         stream.poll_flush(cx)
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let (stream, ..) = self.project();
+        let this = self.project();
+        let stream: Pin<&mut S> = this.stream;
         stream.poll_close(cx)
     }
 }
@@ -81,48 +68,26 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for RespStream<S> {
 impl<S: AsyncWrite + AsyncRead + Unpin> Stream for RespStream<S> {
     type Item = io::Result<Option<Response>>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this: &mut Self = Pin::into_inner(self);
-        let mut did_read = false;
+        let this = self.project();
+        let stream: Pin<&mut S> = this.stream;
+        let buffer: &mut BytesMut = this.r_buffer;
         let mut buf = [0u8; 4096];
+        match stream.poll_read(cx, &mut buf) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Ok(b)) if b == 0 => {
+                let err = io::Error::new(io::ErrorKind::InvalidData, "received 0 bytes");
+                return Poll::Ready(Some(Err(err)));
+            }
+            Poll::Ready(Ok(b)) => {
+                buffer.extend(&buf[..b]);
+            }
+            Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e))),
+        }
         loop {
-            if let Some(index) = this.r_buffer.iter().position(|b| b == &b'\r') {
-                let ln = this.r_buffer.len();
-                let line = this.r_buffer.split_to(index);
-                let _n = match line[0] {
-                    frame::ERROR => {
-                        let err;
-                        if let Ok(err_str) = std::str::from_utf8(&this.r_buffer[1..ln - 2]) {
-                            err = io::Error::new(io::ErrorKind::Other, err_str);
-                        } else {
-                            err = io::Error::new(
-                                io::ErrorKind::InvalidData,
-                                "encoding redis error string",
-                            )
-                        }
-                        return Poll::Ready(Some(Err(err)));
-                    }
-                    frame::ARRAY => {}
-                    _ => {}
-                };
+            if let Some(index) = buffer.iter().position(|b| b == &b'\r') {
+                let line = buffer.split_to(index + 1);
             }
-            let stream_pin: Pin<&mut S> = Pin::new(&mut this.stream);
-            match stream_pin.poll_read(cx, &mut buf) {
-                Poll::Pending => break Poll::Pending,
-                Poll::Ready(Ok(b)) if b == 0 => {
-                    if did_read {
-                        return Poll::Pending;
-                    } else {
-                        let err = io::Error::new(io::ErrorKind::InvalidData, "received 0 bytes");
-                        return Poll::Ready(Some(Err(err)));
-                    }
-                }
-                Poll::Ready(Ok(b)) => {
-                    this.r_buffer.extend(&buf[..b]);
-                    did_read = true;
-                    continue;
-                }
-                Poll::Ready(Err(e)) => break Poll::Ready(Some(Err(e))),
-            }
+            break Poll::Ready(None)
         }
     }
 }
